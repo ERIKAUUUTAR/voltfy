@@ -2,96 +2,93 @@
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<title>MQTT Relay Control - Pudica</title>
+<title>Dashboard MQTT + PZEM + Fuzzy Logic</title>
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 
 <style>
-    body {
-        font-family: Arial, sans-serif;
-        background: #0d1117;
-        color: white;
-        padding: 20px;
-        text-align: center;
+    body { 
+        font-family: Arial; 
+        background:#0d1117; 
+        color:white; 
+        text-align:center; 
+        padding:20px; 
     }
 
-    h1 {
-        color: #58a6ff;
+    .dot { 
+        width:15px; 
+        height:15px; 
+        border-radius:50%; 
+        background:red; 
+        display:inline-block; 
+        margin-right:10px; 
+        box-shadow:0 0 10px red; 
     }
 
-    .status {
-        margin: 15px 0;
-        font-size: 18px;
-        font-weight: bold;
-    }
-
-    .dot {
-        width: 15px;
-        height: 15px;
-        border-radius: 50%;
-        display: inline-block;
-        margin-right: 10px;
-        background: red;
-        box-shadow: 0 0 10px red;
+    .pzem-card, .relay-card {
+        background:#161b22; 
+        padding:20px; 
+        border-radius:12px; 
+        box-shadow:0 0 10px rgba(88,166,255,0.3);
+        margin-top:20px;
     }
 
     .relay-container {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 20px;
-        margin-top: 30px;
+        display:grid; 
+        grid-template-columns:repeat(2,1fr); 
+        gap:20px; 
+        margin-top:20px;
     }
 
-    .relay-card {
-        background: #161b22;
-        padding: 20px;
-        border-radius: 12px;
-        box-shadow: 0 0 15px rgba(88, 166, 255, 0.2);
+    button { 
+        padding:12px 25px; 
+        border:none; 
+        border-radius:8px; 
+        font-weight:bold; 
+        margin:5px; 
+        cursor:pointer; 
     }
 
-    button {
-        padding: 12px 25px;
-        border: none;
-        border-radius: 8px;
-        cursor: pointer;
-        font-size: 16px;
-        margin: 8px;
-        width: 100px;
-        font-weight: bold;
+    .on-btn { background:#2ea043; color:white; }
+    .off-btn { background:#da3633; color:white; }
+
+    #fuzzy { 
+        font-size:25px; 
+        margin-top:15px; 
+        font-weight:bold; 
     }
 
-    .on-btn {
-        background: #2ea043;
-        color: white;
-    }
-
-    .off-btn {
-        background: #da3633;
-        color: white;
-    }
-
-    .log {
-        margin-top: 25px;
-        background: #161b22;
-        padding: 15px;
-        border-radius: 10px;
-        height: 150px;
-        overflow-y: auto;
-        text-align: left;
+    #logBox {
+        background:#11161d;
+        border-left:4px solid #58a6ff;
+        text-align:left;
+        margin-top:25px;
+        padding:15px;
+        height:200px;
+        overflow-y:auto;
+        font-size:14px;
+        border-radius:8px;
     }
 </style>
-
 </head>
 <body>
 
-<h1>Dashboard Kontrol 4 Relay - Keompok 2</h1>
+<h1>Monitoring PZEM + Fuzzy Logic</h1>
 
-<div class="status">
+<div>
     <span id="statusDot" class="dot"></span>
-    <span id="statusText">Menghubungkan...</span>
+    <span id="statusText">MQTT Connecting...</span>
+</div>
+
+<div class="pzem-card">
+    <h2>Data Sensor</h2>
+    <div id="volt">Volt: ---</div>
+    <div id="arus">Arus: ---</div>
+    <div id="power">Power: ---</div>
+    <div id="energy">Energi: ---</div>
+    <div id="fuzzy">Konsumsi: ---</div>
 </div>
 
 <div class="relay-container">
-    
     <div class="relay-card">
         <h2>Relay 1</h2>
         <button class="on-btn" onclick="sendCmd('ON1')">ON</button>
@@ -115,70 +112,103 @@
         <button class="on-btn" onclick="sendCmd('ON4')">ON</button>
         <button class="off-btn" onclick="sendCmd('OFF4')">OFF</button>
     </div>
-
 </div>
 
-<h2>Log MQTT</h2>
-<div class="log" id="logBox"></div>
+<h2>Web Serial Monitor</h2>
+<div id="logBox"></div>
 
 <script>
-    // ---------------- MQTT CONFIG ----------------
-    const host = "wss://5ce43b5ff14e439992bf783a9c4fbd58.s1.eu.hivemq.cloud:8884/mqtt";
+// ================= MQTT SETTINGS =================
 
-    const options = {
-        username: "pudica12",
-        password: "Erika145",
-        clean: true,
-        connectTimeout: 5000,
-        reconnectPeriod: 3000
-    };
+const clientId = "web-" + Math.random().toString(16).substr(2, 8);
+const host = "wss://5ce43b5ff14e439992bf783a9c4fbd58.s1.eu.hivemq.cloud:8884/mqtt";
 
-    const topicPub = "pudica/command";
-    const topicSub = "pudica/test";
+const options = {
+    clientId,
+    username: "pudica12",
+    password: "Erika145",
+    clean: true,
+    reconnectPeriod: 3000,
+    rejectUnauthorized: false
+};
 
-    // ---------------- Connect MQTT ----------------
-    const client = mqtt.connect(host, options);
+const topicPzem = "pudica/pzem";
+const topicCmd  = "pudica/command";
 
-    const statusText = document.getElementById("statusText");
-    const statusDot = document.getElementById("statusDot");
-    const logBox = document.getElementById("logBox");
+const client = mqtt.connect(host, options);
 
-    function log(text) {
-        logBox.innerHTML += text + "<br>";
-        logBox.scrollTop = logBox.scrollHeight;
+// UI
+const dot   = document.getElementById("statusDot");
+const sText = document.getElementById("statusText");
+const logBox = document.getElementById("logBox");
+
+// Add line to log
+function log(msg) {
+    logBox.innerHTML += msg + "<br>";
+    logBox.scrollTop = logBox.scrollHeight;
+}
+
+// ================= CONNECTED =================
+
+client.on("connect", () => {
+    dot.style.background = "#2ea043";
+    dot.style.boxShadow = "0 0 10px #2ea043";
+    sText.textContent = "Connected!";
+    
+    log("<span style='color:#2ea043'>[MQTT] Connected to broker</span>");
+
+    client.subscribe(topicPzem, () => {
+        log("<span style='color:#58a6ff'>[MQTT] Subscribed to PZEM topic</span>");
+    });
+});
+
+// ================= ERROR HANDLING =================
+
+client.on("error", (err) => {
+    log("<span style='color:red'>[ERROR] MQTT Error: " + err + "</span>");
+});
+
+client.on("close", () => {
+    dot.style.background = "red";
+    sText.textContent = "Disconnected!";
+    log("<span style='color:red'>[MQTT] Connection Lost</span>");
+});
+
+// ================= RECEIVE MESSAGE =================
+
+client.on("message", (topic, message) => {
+    if (topic === topicPzem) {
+        const data = JSON.parse(message);
+
+        // Update UI
+        document.getElementById("volt").textContent   = "Volt: " + data.volt + " V";
+        document.getElementById("arus").textContent   = "Arus: " + data.arus + " A";
+        document.getElementById("power").textContent  = "Power: " + data.power + " W";
+        document.getElementById("energy").textContent = "Energi: " + data.energy + " Wh";
+
+        const fuzzy = document.getElementById("fuzzy");
+        fuzzy.textContent = "Konsumsi: " + data.konsumsi;
+
+        // Warna fuzzy logic
+        if (data.konsumsi === "hemat") fuzzy.style.color = "#2ea043";
+        else if (data.konsumsi === "sedang") fuzzy.style.color = "#daa520";
+        else fuzzy.style.color = "#ff4d4d";
+
+        // Add log
+        log("[DATA] Volt=" + data.volt + 
+            "  Arus=" + data.arus +
+            "  Power=" + data.power +
+            "  Energi=" + data.energy +
+            "  Fuzzy=" + data.konsumsi);
     }
+});
 
-    client.on("connect", () => {
-        statusDot.style.background = "#2ea043";
-        statusDot.style.boxShadow = "0 0 10px #2ea043";
-        statusText.textContent = "Terhubung ke HiveMQ";
+// ================= SEND COMMAND =================
 
-        client.subscribe(topicSub);
-        log("<b>Connected!</b> Subscribed to " + topicSub);
-    });
-
-    client.on("reconnect", () => {
-        statusDot.style.background = "yellow";
-        statusDot.style.boxShadow = "0 0 10px yellow";
-        statusText.textContent = "Menghubungkan ulang...";
-    });
-
-    client.on("error", (err) => {
-        statusDot.style.background = "red";
-        statusDot.style.boxShadow = "0 0 10px red";
-        statusText.textContent = "Error MQTT!";
-        log("<span style='color:red'>MQTT Error: " + err + "</span>");
-    });
-
-    client.on("message", (topic, message) => {
-        log("<b>MQTT:</b> " + message.toString());
-    });
-
-    // ---------------- SEND COMMAND ----------------
-    function sendCmd(cmd) {
-        client.publish(topicPub, cmd);
-        log("Dikirim → " + cmd);
-    }
+function sendCmd(cmd) {
+    client.publish(topicCmd, cmd);
+    log("<span style='color:#00eaff'>[CMD] Sent: " + cmd + "</span>");
+}
 </script>
 
 </body>
