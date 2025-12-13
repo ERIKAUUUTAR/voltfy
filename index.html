@@ -1,109 +1,115 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Dashboard Counter Barang</title>
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
   <style>
     body {
-      font-family: Arial, sans-serif;
-      background: #f4f6f8;
+      font-family: Arial, Helvetica, sans-serif;
+      background: #eef2f5;
       display: flex;
       justify-content: center;
       align-items: center;
       height: 100vh;
+      margin: 0;
     }
     .card {
-      background: white;
+      background: #ffffff;
       padding: 30px 40px;
-      border-radius: 12px;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+      border-radius: 14px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.15);
       text-align: center;
-      width: 300px;
+      width: 320px;
     }
     h1 {
+      margin: 0 0 15px;
       font-size: 22px;
-      margin-bottom: 20px;
-    }
-    .count {
-      font-size: 64px;
-      font-weight: bold;
       color: #2c3e50;
     }
+    .counter {
+      font-size: 72px;
+      font-weight: bold;
+      margin: 20px 0;
+      color: #1abc9c;
+    }
     .status {
-      margin-top: 15px;
       font-size: 14px;
-      color: green;
+      margin-top: 10px;
+      color: #888;
     }
     button {
       margin-top: 20px;
-      padding: 10px 20px;
+      padding: 12px 25px;
+      font-size: 14px;
       border: none;
       border-radius: 8px;
-      background: #3498db;
+      background-color: #e74c3c;
       color: white;
       cursor: pointer;
-      font-size: 14px;
     }
     button:hover {
-      background: #2980b9;
+      background-color: #c0392b;
     }
   </style>
 </head>
 <body>
+
   <div class="card">
     <h1>Jumlah Barang</h1>
-    <div id="count" class="count">0</div>
+    <div id="counter" class="counter">0</div>
+    <button onclick="resetCounter()">RESET</button>
     <div id="status" class="status">Menghubungkan ke MQTT...</div>
-    <button onclick="resetCounter()">Reset</button>
   </div>
 
-<script>
-  // ---------------- MQTT CONFIG ----------------
-  const options = {
-    username: 'pudica12',
-    password: 'Erika145',
-    protocol: 'wss',
-    port: 8884,
-    reconnectPeriod: 2000
-  };
+  <script>
+    // ------------ MQTT CONFIG (HiveMQ Cloud) ------------
+    const mqttOptions = {
+      username: 'pudica12',
+      password: 'Erika145',
+      protocol: 'wss',
+      reconnectPeriod: 2000
+    };
 
-  const client = mqtt.connect(
-    'wss://5ce43b5ff14e439992bf783a9c4fbd58.s1.eu.hivemq.cloud:8884/mqtt',
-    options
-  );
+    const brokerUrl = 'wss://5ce43b5ff14e439992bf783a9c4fbd58.s1.eu.hivemq.cloud:8884/mqtt';
 
-  const topicData = 'pudica/pzem';
-  const topicCmd  = 'pudica/command';
+    const topicData = 'pudica/pzem';
+    const topicCmd  = 'pudica/command';
 
-  const countEl = document.getElementById('count');
-  const statusEl = document.getElementById('status');
+    const client = mqtt.connect(brokerUrl, mqttOptions);
 
-  client.on('connect', () => {
-    statusEl.textContent = 'MQTT Connected';
-    statusEl.style.color = 'green';
-    client.subscribe(topicData);
-  });
+    const counterEl = document.getElementById('counter');
+    const statusEl  = document.getElementById('status');
 
-  client.on('message', (topic, message) => {
-    if (topic === topicData) {
-      countEl.textContent = message.toString();
+    // ------------ MQTT EVENTS ------------
+    client.on('connect', () => {
+      statusEl.textContent = 'MQTT Connected';
+      statusEl.style.color = 'green';
+      client.subscribe(topicData);
+    });
+
+    client.on('message', (topic, message) => {
+      if (topic === topicData) {
+        counterEl.textContent = message.toString();
+      }
+    });
+
+    client.on('reconnect', () => {
+      statusEl.textContent = 'Reconnecting...';
+      statusEl.style.color = 'orange';
+    });
+
+    client.on('error', (err) => {
+      statusEl.textContent = 'MQTT Error';
+      statusEl.style.color = 'red';
+      console.error(err);
+    });
+
+    // ------------ RESET FUNCTION ------------
+    function resetCounter() {
+      client.publish(topicCmd, 'RESET');
     }
-  });
+  </script>
 
-  client.on('reconnect', () => {
-    statusEl.textContent = 'Reconnecting...';
-    statusEl.style.color = 'orange';
-  });
-
-  client.on('error', () => {
-    statusEl.textContent = 'MQTT Error';
-    statusEl.style.color = 'red';
-  });
-
-  function resetCounter() {
-    client.publish(topicCmd, 'RESET');
-  }
-</script>
 </body>
 </html>
