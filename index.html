@@ -1,115 +1,161 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
   <title>Dashboard Counter Barang</title>
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+
   <style>
     body {
-      font-family: Arial, Helvetica, sans-serif;
-      background: #eef2f5;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: linear-gradient(135deg, #1d2671, #c33764);
       display: flex;
       justify-content: center;
       align-items: center;
       height: 100vh;
       margin: 0;
     }
+
     .card {
       background: #ffffff;
       padding: 30px 40px;
-      border-radius: 14px;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+      border-radius: 16px;
+      box-shadow: 0 15px 35px rgba(0,0,0,0.25);
       text-align: center;
-      width: 320px;
+      width: 340px;
+      position: relative;
     }
+
+    .identity {
+      font-size: 13px;
+      color: #555;
+      margin-bottom: 15px;
+      line-height: 1.5;
+    }
+
+    .identity strong {
+      color: #2c3e50;
+      font-size: 14px;
+    }
+
     h1 {
-      margin: 0 0 15px;
       font-size: 22px;
+      margin-bottom: 10px;
       color: #2c3e50;
     }
-    .counter {
+
+    .subtitle {
+      font-size: 13px;
+      color: #7f8c8d;
+      margin-bottom: 20px;
+    }
+
+    .count {
       font-size: 72px;
       font-weight: bold;
-      margin: 20px 0;
-      color: #1abc9c;
+      color: #1d2671;
+      margin: 10px 0;
     }
+
     .status {
-      font-size: 14px;
       margin-top: 10px;
-      color: #888;
+      font-size: 13px;
+      font-weight: 500;
     }
+
     button {
-      margin-top: 20px;
-      padding: 12px 25px;
-      font-size: 14px;
+      margin-top: 25px;
+      padding: 12px 28px;
       border: none;
-      border-radius: 8px;
-      background-color: #e74c3c;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #3498db, #2c3e50);
       color: white;
       cursor: pointer;
+      font-size: 14px;
+      transition: 0.3s ease;
     }
+
     button:hover {
-      background-color: #c0392b;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 15px rgba(0,0,0,0.2);
+    }
+
+    footer {
+      margin-top: 20px;
+      font-size: 11px;
+      color: #95a5a6;
     }
   </style>
 </head>
-<body>
 
+<body>
   <div class="card">
-    <h1>Jumlah Barang</h1>
-    <div id="counter" class="counter">0</div>
-    <button onclick="resetCounter()">RESET</button>
+
+    <!-- IDENTITAS MAHASISWA -->
+    <div class="identity">
+      <strong>Rizqullah Naufal Leksono</strong><br>
+      NIM: 220491100025
+    </div>
+
+    <h1>Dashboard Counter Barang</h1>
+    <div class="subtitle">Monitoring jumlah barang berbasis MQTT</div>
+
+    <div id="count" class="count">0</div>
     <div id="status" class="status">Menghubungkan ke MQTT...</div>
+
+    <button onclick="resetCounter()">Reset Counter</button>
+
+    <footer>
+      Sistem Monitoring IoT
+    </footer>
   </div>
 
-  <script>
-    // ------------ MQTT CONFIG (HiveMQ Cloud) ------------
-    const mqttOptions = {
-      username: 'pudica12',
-      password: 'Erika145',
-      protocol: 'wss',
-      reconnectPeriod: 2000
-    };
+<script>
+  // ---------------- MQTT CONFIG ----------------
+  const options = {
+    username: 'pudica12',
+    password: 'Erika145',
+    protocol: 'wss',
+    port: 8884,
+    reconnectPeriod: 2000
+  };
 
-    const brokerUrl = 'wss://5ce43b5ff14e439992bf783a9c4fbd58.s1.eu.hivemq.cloud:8884/mqtt';
+  const client = mqtt.connect(
+    'wss://5ce43b5ff14e439992bf783a9c4fbd58.s1.eu.hivemq.cloud:8884/mqtt',
+    options
+  );
 
-    const topicData = 'pudica/pzem';
-    const topicCmd  = 'pudica/command';
+  const topicData = 'pudica/pzem';
+  const topicCmd  = 'pudica/command';
 
-    const client = mqtt.connect(brokerUrl, mqttOptions);
+  const countEl = document.getElementById('count');
+  const statusEl = document.getElementById('status');
 
-    const counterEl = document.getElementById('counter');
-    const statusEl  = document.getElementById('status');
+  client.on('connect', () => {
+    statusEl.textContent = 'MQTT Connected';
+    statusEl.style.color = 'green';
+    client.subscribe(topicData);
+  });
 
-    // ------------ MQTT EVENTS ------------
-    client.on('connect', () => {
-      statusEl.textContent = 'MQTT Connected';
-      statusEl.style.color = 'green';
-      client.subscribe(topicData);
-    });
-
-    client.on('message', (topic, message) => {
-      if (topic === topicData) {
-        counterEl.textContent = message.toString();
-      }
-    });
-
-    client.on('reconnect', () => {
-      statusEl.textContent = 'Reconnecting...';
-      statusEl.style.color = 'orange';
-    });
-
-    client.on('error', (err) => {
-      statusEl.textContent = 'MQTT Error';
-      statusEl.style.color = 'red';
-      console.error(err);
-    });
-
-    // ------------ RESET FUNCTION ------------
-    function resetCounter() {
-      client.publish(topicCmd, 'RESET');
+  client.on('message', (topic, message) => {
+    if (topic === topicData) {
+      countEl.textContent = message.toString();
     }
-  </script>
+  });
 
+  client.on('reconnect', () => {
+    statusEl.textContent = 'Reconnecting...';
+    statusEl.style.color = 'orange';
+  });
+
+  client.on('error', () => {
+    statusEl.textContent = 'MQTT Error';
+    statusEl.style.color = 'red';
+  });
+
+  function resetCounter() {
+    client.publish(topicCmd, 'RESET');
+  }
+</script>
 </body>
 </html>
