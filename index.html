@@ -2,160 +2,210 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <title>Dashboard Counter Barang</title>
-  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
-
+  <title>Simulasi Robot Grid Dinamis</title>
   <style>
     body {
-      font-family: 'Segoe UI', Arial, sans-serif;
-      background: linear-gradient(135deg, #1d2671, #c33764);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-      margin: 0;
+      font-family: Arial, sans-serif;
     }
-
-    .card {
-      background: #ffffff;
-      padding: 30px 40px;
-      border-radius: 16px;
-      box-shadow: 0 15px 35px rgba(0,0,0,0.25);
-      text-align: center;
-      width: 340px;
-      position: relative;
-    }
-
-    .identity {
-      font-size: 13px;
-      color: #555;
-      margin-bottom: 15px;
-      line-height: 1.5;
-    }
-
-    .identity strong {
-      color: #2c3e50;
-      font-size: 14px;
-    }
-
-    h1 {
-      font-size: 22px;
-      margin-bottom: 10px;
-      color: #2c3e50;
-    }
-
-    .subtitle {
-      font-size: 13px;
-      color: #7f8c8d;
-      margin-bottom: 20px;
-    }
-
-    .count {
-      font-size: 72px;
-      font-weight: bold;
-      color: #1d2671;
-      margin: 10px 0;
-    }
-
-    .status {
+    canvas {
+      border: 1px solid black;
       margin-top: 10px;
-      font-size: 13px;
-      font-weight: 500;
     }
-
-    button {
-      margin-top: 25px;
-      padding: 12px 28px;
-      border: none;
-      border-radius: 10px;
-      background: linear-gradient(135deg, #3498db, #2c3e50);
-      color: white;
-      cursor: pointer;
-      font-size: 14px;
-      transition: 0.3s ease;
-    }
-
-    button:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 8px 15px rgba(0,0,0,0.2);
-    }
-
-    footer {
-      margin-top: 20px;
-      font-size: 11px;
-      color: #95a5a6;
+    button, input {
+      margin: 4px;
     }
   </style>
 </head>
-
 <body>
-  <div class="card">
 
-    <!-- IDENTITAS MAHASISWA -->
-    <div class="identity">
-      <strong>Rizqullah Naufal Leksono</strong><br>
-      NIM: 220491100025
-    </div>
+<h3>Simulasi Navigasi Multi-Robot Berbasis Grid Dinamis</h3>
 
-    <h1>Dashboard Counter Barang</h1>
-    <div class="subtitle">Mata Kuliah Sistem Kontrol</div>
+Jumlah Baris:
+<input type="number" id="rowsInput" value="6" min="2">
+Jumlah Kolom:
+<input type="number" id="colsInput" value="6" min="2">
+<button onclick="generateGrid()">Generate Grid</button>
 
-    <div id="count" class="count">0</div>
-    <div id="status" class="status">Menghubungkan ke MQTT...</div>
+<br>
 
-    <button onclick="resetCounter()">Reset Counter</button>
+<button onclick="setMode(0)">Jalur Aman (0)</button>
+<button onclick="setMode(1)">Obstacle / Goal (1)</button>
+<button onclick="setMode(2)">Robot (2)</button>
+<button onclick="startSimulation()">Mulai</button>
 
-    <footer>
-      Sistem Monitoring IoT
-    </footer>
-  </div>
+<br>
+
+<canvas id="gridCanvas" width="420" height="420"></canvas>
 
 <script>
-  // ---------------- MQTT CONFIG ----------------
-  const options = {
-    username: 'pudica12',
-    password: 'Erika145',
-    protocol: 'wss',
-    port: 8884,
-    reconnectPeriod: 2000
-  };
+const canvas = document.getElementById("gridCanvas");
+const ctx = canvas.getContext("2d");
 
-  const client = mqtt.connect(
-    'wss://5fc256d8cf06470999e59076d5dcc1a6.s1.eu.hivemq.cloud:8884/mqtt',
-    options
+let rows = 6;
+let cols = 6;
+let cellSize = 60;
+let mode = 0;
+
+let grid = [];
+let robotPos = null;
+let goalPos = null;
+let pathMemory = [];
+
+function generateGrid() {
+  rows = parseInt(document.getElementById("rowsInput").value);
+  cols = parseInt(document.getElementById("colsInput").value);
+
+  cellSize = Math.min(
+    canvas.width / cols,
+    canvas.height / rows
   );
 
-  const topicData = 'pudica/pzem';
-  const topicCmd  = 'pudica/command';
+  grid = Array.from({ length: rows }, () =>
+    Array(cols).fill(0)
+  );
 
-  const countEl = document.getElementById('count');
-  const statusEl = document.getElementById('status');
+  robotPos = null;
+  goalPos = null;
+  pathMemory = [];
 
-  client.on('connect', () => {
-    statusEl.textContent = 'MQTT Connected';
-    statusEl.style.color = 'green';
-    client.subscribe(topicData);
-  });
+  drawGrid();
+}
 
-  client.on('message', (topic, message) => {
-    if (topic === topicData) {
-      countEl.textContent = message.toString();
+function setMode(m) {
+  mode = m;
+}
+
+canvas.addEventListener("click", function(e) {
+  const rect = canvas.getBoundingClientRect();
+  const x = Math.floor((e.clientX - rect.left) / cellSize);
+  const y = Math.floor((e.clientY - rect.top) / cellSize);
+
+  if (x < 0 || y < 0 || x >= cols || y >= rows) return;
+
+  if (mode === 2) {
+    // Pastikan hanya satu robot
+    if (robotPos) {
+      grid[robotPos.y][robotPos.x] = 0;
     }
-  });
-
-  client.on('reconnect', () => {
-    statusEl.textContent = 'Reconnecting...';
-    statusEl.style.color = 'orange';
-  });
-
-  client.on('error', () => {
-    statusEl.textContent = 'MQTT Error';
-    statusEl.style.color = 'red';
-  });
-
-  function resetCounter() {
-    client.publish(topicCmd, 'RESET');
+    robotPos = { x, y };
   }
+
+  grid[y][x] = mode;
+  drawGrid();
+});
+
+function drawGrid() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      if (grid[y][x] === 1) ctx.fillStyle = "gray";
+      else if (grid[y][x] === 2) ctx.fillStyle = "blue";
+      else ctx.fillStyle = "white";
+
+      ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+      ctx.strokeRect(x * cellSize, y * cellSize, cellSize, cellSize);
+    }
+  }
+}
+
+function startSimulation() {
+  if (!robotPos) {
+    alert("Letakkan robot terlebih dahulu.");
+    return;
+  }
+
+  // Ambil obstacle pertama sebagai goal
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      if (grid[y][x] === 1) {
+        goalPos = { x, y };
+        break;
+      }
+    }
+    if (goalPos) break;
+  }
+
+  if (!goalPos) {
+    alert("Tidak ada goal (obstacle) yang dipilih.");
+    return;
+  }
+
+  pathMemory = findPath(robotPos, goalPos);
+  moveRobot(pathMemory);
+}
+
+function findPath(start, goal) {
+  let queue = [];
+  let visited = Array.from({ length: rows }, () =>
+    Array(cols).fill(false)
+  );
+  let parent = Array.from({ length: rows }, () =>
+    Array(cols).fill(null)
+  );
+
+  queue.push(start);
+  visited[start.y][start.x] = true;
+
+  const dirs = [
+    { x: 1, y: 0 },
+    { x: -1, y: 0 },
+    { x: 0, y: 1 },
+    { x: 0, y: -1 }
+  ];
+
+  while (queue.length > 0) {
+    let current = queue.shift();
+
+    if (current.x === goal.x && current.y === goal.y) break;
+
+    for (let d of dirs) {
+      let nx = current.x + d.x;
+      let ny = current.y + d.y;
+
+      if (
+        nx >= 0 && ny >= 0 &&
+        nx < cols && ny < rows &&
+        !visited[ny][nx] &&
+        grid[ny][nx] !== 1
+      ) {
+        visited[ny][nx] = true;
+        parent[ny][nx] = current;
+        queue.push({ x: nx, y: ny });
+      }
+    }
+  }
+
+  let path = [];
+  let p = goal;
+  while (p && !(p.x === start.x && p.y === start.y)) {
+    path.push(p);
+    p = parent[p.y][p.x];
+  }
+
+  return path.reverse();
+}
+
+function moveRobot(path) {
+  let i = 0;
+  const interval = setInterval(() => {
+    if (i >= path.length) {
+      clearInterval(interval);
+      console.log("Path Memory:", path);
+      return;
+    }
+
+    grid[robotPos.y][robotPos.x] = 0;
+    robotPos = path[i];
+    grid[robotPos.y][robotPos.x] = 2;
+
+    drawGrid();
+    i++;
+  }, 400);
+}
+
+generateGrid();
 </script>
+
 </body>
 </html>
